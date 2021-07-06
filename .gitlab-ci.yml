@@ -1,0 +1,41 @@
+image: docker:latest
+services:
+  - docker:dind
+
+variables:
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+stages:
+  - release
+  - test
+  - review
+
+image_build:
+  stage: release
+  script:
+    - export DOCKER_HOST=$DOCKER_PORT
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+    - docker build --pull -t $IMAGE_TAG .
+    - docker push $IMAGE_TAG
+
+test:
+  stage: test
+  script:
+    - echo "Testing ..."
+
+review:
+  image:
+    name: lachlanevenson/k8s-kubectl:latest
+    entrypoint: ["/bin/sh", "-c"]
+  stage: review
+  only:
+    - branches
+  except:
+    - tags
+  environment:
+    name: live
+    url: https://hikerma.com
+  script:
+    - sed -i "s/__VERSION__/$CI_COMMIT_SHORT_SHA/" deployment.yaml
+    - kubectl apply -f deployment.yaml
+    - kubectl get deployments || true
